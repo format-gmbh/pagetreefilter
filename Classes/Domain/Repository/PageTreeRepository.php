@@ -23,7 +23,6 @@ class PageTreeRepository extends \TYPO3\CMS\Backend\Tree\Repository\PageTreeRepo
 
     protected const ALLOWED_TABLE_FIELDS = [
         'tt_content:CType',
-        'tt_content:list_type',
     ];
     // allowed fields, regardless of table
     protected const ALLOWED_FIELDS = [

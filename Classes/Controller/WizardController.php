@@ -12,11 +12,12 @@ use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
 use TYPO3\CMS\Core\Http\HtmlResponse;
-use TYPO3\CMS\Core\Imaging\Icon;
 use TYPO3\CMS\Core\Imaging\IconFactory;
+use TYPO3\CMS\Core\Imaging\IconSize;
 use TYPO3\CMS\Core\Imaging\IconRegistry;
 use TYPO3\CMS\Core\Imaging\IconProvider\BitmapIconProvider;
 use TYPO3\CMS\Core\Imaging\IconProvider\SvgIconProvider;
+use TYPO3\CMS\Core\Schema\TcaSchemaFactory;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class WizardController extends NewContentElementController
@@ -49,7 +50,7 @@ class WizardController extends NewContentElementController
         // Get processed and modified wizard items
         $wizardItems = $this->eventDispatcher->dispatch(
             new ModifyNewContentElementWizardItemsEvent(
-                parent::getWizards(),
+                parent::getWizards($request),
                 $this->pageInfo,
                 $this->colPos,
                 $this->sys_language,
@@ -58,10 +59,9 @@ class WizardController extends NewContentElementController
             )
         )->getWizardItems();
 
-        $wizardItems = $this->appendItemsHavingNoWizardConfiguration($wizardItems, 'list_type');
         $wizardItems = $this->appendItemsHavingNoWizardConfiguration($wizardItems, 'CType');
         ksort($wizardItems);
-        $wizardItems = $this->keepOnlyListTypeAndCTypeInDefaultValues($wizardItems);
+        $wizardItems = $this->keepOnlyCTypeInDefaultValues($wizardItems);
         $wizardItems = $this->disableWizardsHavingNoResults($wizardItems);
         $wizardItems = $this->appendRecords($wizardItems);
         $wizardItems = $this->appendPageTypes($wizardItems);
@@ -82,7 +82,7 @@ class WizardController extends NewContentElementController
                 $viewVariables = [
                     'wizardInformation' => $wizardItem,
                     'wizardKey' => $wizardKey,
-                    'icon' => $this->iconFactory->getIcon(($wizardItem['iconIdentifier'] ?? ''), Icon::SIZE_MEDIUM, ($wizardItem['iconOverlay'] ?? ''))->render(),
+                    'icon' => $this->iconFactory->getIcon(($wizardItem['iconIdentifier'] ?? ''), IconSize::MEDIUM, ($wizardItem['iconOverlay'] ?? ''))->render(),
                 ];
                 $menuItems[$key]['contentItems'][] = $viewVariables;
             }
@@ -110,7 +110,7 @@ class WizardController extends NewContentElementController
                 continue;
             }
 
-            $newDefaultValues = $columnName === 'list_type' ? ['CType' => 'list', 'list_type' => $contentType] : ['CType' => $contentType];
+            $newDefaultValues = ['CType' => $contentType];
             $availableDefaultValues = array_map(function ($wizard) {
                 return $wizard['tt_content_defValues'] ?? [];
             }, $wizardItems);
@@ -119,11 +119,7 @@ class WizardController extends NewContentElementController
             }
 
             $iconIdentifier = $this->createIconIdentifier($itemConfiguration['icon'] ?? '');
-            if ($columnName === 'list_type') {
-                $identifier = 'plugins_' . $contentType;
-            } else {
-                $identifier = ($itemConfiguration['group'] ?? 'default') . '_' . $contentType;
-            }
+            $identifier = ($itemConfiguration['group'] ?? 'default') . '_' . $contentType;
             $wizardItems[$identifier] = [
                 'title' => $this->getLanguageService()->sL($itemConfiguration['label']),
                 'iconIdentifier' => $iconIdentifier,
@@ -172,7 +168,7 @@ class WizardController extends NewContentElementController
             ) {
                 $wizardItems['records_' . $tableName] = [
                     'title' => $this->getLanguageService()->sL($tableConfiguration['ctrl']['title']),
-                    'iconIdentifier' => $this->iconFactory->mapRecordTypeToIconIdentifier($tableName, []),
+                    'iconIdentifier' => $this->iconFactory->mapRecordTypeToIconIdentifier($tableName, [], $this->tcaSchemaFactory->get($tableName)),
                     'filter' => sprintf('table=%s', $tableName),
                     'disabled' => $this->areRecordsInTable($tableName) ? false : true
                 ];
@@ -197,14 +193,14 @@ class WizardController extends NewContentElementController
         return $pageTypes;
     }
 
-    protected function keepOnlyListTypeAndCTypeInDefaultValues(array $wizardItems): array
+    protected function keepOnlyCTypeInDefaultValues(array $wizardItems): array
     {
         foreach($wizardItems as $index => $wizard) {
             if (!is_array($wizard['tt_content_defValues'] ?? false)) {
                 continue;
             }
             foreach($wizard['tt_content_defValues'] as $columnName => $defaultValue) {
-                if (!in_array($columnName, ['CType', 'list_type'])) {
+                if ($columnName !== 'CType') {
                     unset($wizardItems[$index]['tt_content_defValues'][$columnName]);
                 }
             }
@@ -219,22 +215,15 @@ class WizardController extends NewContentElementController
         $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tt_content');
         $queryBuilder->getRestrictions()->removeAll()->add(GeneralUtility::makeInstance(DeletedRestriction::class));
         $rows = $queryBuilder
-            ->select('CType', 'list_type')
+            ->select('CType')
             ->from('tt_content')
-            ->groupBy('CType', 'list_type')
+            ->groupBy('CType')
             ->executeQuery()
             ->fetchAllAssociative();
 
-        $generalPluginEnabled = false;
         $contentTypes = [];
         foreach ($rows as $row) {
-            if ($row['CType'] !== 'list') {
-                unset($row['list_type']);
-                $contentTypes[$row['CType']] = $row;
-            } else {
-                $contentTypes[$row['CType'] . $row['list_type']] = $row;
-                $generalPluginEnabled = true;
-            }
+            $contentTypes[$row['CType']] = $row;
         }
 
         foreach ($wizardItems as $no => $wizard) {
@@ -242,17 +231,9 @@ class WizardController extends NewContentElementController
                 continue;
             }
 
-            if ($wizard['tt_content_defValues']['CType'] !== 'list') {
-                unset($wizard['tt_content_defValues']['list_type']);
-            }
-
-            if ($wizard['tt_content_defValues'] === ['CType' => 'list']) {
-                $wizard[$no]['disabled'] = $generalPluginEnabled;
-            } else {
-                $keyFound = array_search($wizard['tt_content_defValues'], $contentTypes);
-                $wizardItems[$no]['disabled'] = is_bool($keyFound);
-                unset($contentTypes[$keyFound]);
-            }
+            $keyFound = array_search($wizard['tt_content_defValues'], $contentTypes);
+            $wizardItems[$no]['disabled'] = is_bool($keyFound);
+            unset($contentTypes[$keyFound]);
         }
 
         $this->unknownContentTypes = $contentTypes;
@@ -271,7 +252,7 @@ class WizardController extends NewContentElementController
                 }
 
                 $wizardItems['unknown_unknown' . $no] = [
-                    'title' => $unknownContentType['list_type'] ?? $unknownContentType['CType'],
+                    'title' => $unknownContentType['CType'],
                     'iconIdentifier' => 'default-not-found',
                     'filter' => sprintf('table=tt_content %s', implode(' ', $filterParts)),
                     'disabled' => false

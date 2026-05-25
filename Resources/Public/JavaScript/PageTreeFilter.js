@@ -1,9 +1,9 @@
 class PageTreeFilter
 {
-    selectorSearchInput = '#typo3-pagetree .search-input';
+    selectorSearchInput = '#typo3-pagetree-toolbar .search-input';
     selectorPagetreeComponent = '#typo3-pagetree-tree';
     selectorPagetreeReady = '#typo3-pagetree-tree .node';
-    selectorToolbarReady = 'typo3-backend-navigation-component-pagetree-toolbar .tree-toolbar__submenu ul.dropdown-menu';
+    selectorToolbarReady = '#typo3-pagetree-toolbar .tree-toolbar__menu ul.dropdown-menu';
     urlParameter = 'tx_pagetreefilter[filter]';
 
     constructor()
@@ -154,7 +154,7 @@ class PageTreeFilter
             buttonIcon.setAttribute('identifier', 'actions-toggle-off');
         }
 
-        const tabs = modal.querySelectorAll('a.nav-link');
+        const tabs = modal.querySelectorAll('.nav-link');
         tabs.forEach(function(tab) {
             const identifier = tab.getAttribute('aria-controls');
             const visibleItemsInTab = modal.querySelectorAll('#' + identifier + ' .pagetreefilter-wizard-item:not(.hide)');
@@ -164,12 +164,12 @@ class PageTreeFilter
             }
         });
 
-        const activeTabHidden = modal.querySelector('.nav-item.hide a.nav-link.active');
+        const activeTabHidden = modal.querySelector('.nav-item.hide .nav-link.active');
         if (activeTabHidden) {
             activeTabHidden.classList.remove('active');
             modal.querySelector('#' + activeTabHidden.getAttribute('aria-controls')).classList.remove('active');
 
-            const firstNonHiddenTab = modal.querySelector('.nav-item:not(.hide) a.nav-link');
+            const firstNonHiddenTab = modal.querySelector('.nav-item:not(.hide) .nav-link');
             if (firstNonHiddenTab) {
                 firstNonHiddenTab.classList.add('active');
                 modal.querySelector('#' + firstNonHiddenTab.getAttribute('aria-controls')).classList.add('active');
