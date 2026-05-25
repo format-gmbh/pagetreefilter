@@ -28,7 +28,7 @@ class ConfigurationUtility
     {
         $backendUser = self::getBackendUser();
         if (!$backendUser->isAdmin()) {
-            $webMounts = $backendUser->returnWebmounts();
+            $webMounts = $backendUser->getWebmounts();
             foreach ($webMounts as $pageId) {
                 if ($pageId != 0) {
                     return $pageId;
