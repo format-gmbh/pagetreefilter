@@ -5,6 +5,7 @@
 .pagetreefilter-wizard .nav-tabs {
     padding: 0.75rem 0.75rem 0;
     background: 0 0;
+    flex-wrap: wrap;
 }
 
 .pagetreefilter-wizard .panel-body {
